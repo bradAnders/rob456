@@ -1,0 +1,2 @@
+beginner_tutorials:nav_bundle:rob456_hw2:rob456_hw3:rob456_labs:rob456_project:simple_navigation_goals:stagebot_2dnav
+-DCATKIN_DEVEL_PREFIX=/home/brad/catkin_ws/devel -DCMAKE_INSTALL_PREFIX=/home/brad/catkin_ws/install -G Unix Makefiles
