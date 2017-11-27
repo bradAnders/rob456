@@ -45,10 +45,12 @@ wallWidth = int(1.2/0.05)
 # Properties of generic occupancy grid
 width = 4000
 resolution= 0.05
+# converts coordinates to location in 1D array
 def twoDto1((row, col)):
     return (width*row)+col
 # end twoDto1
 
+# converts index to equivalent locaiton in 2D representation
 def oneDto2(index):
     col = index % width
     return (index-col)/width, col
@@ -88,15 +90,19 @@ def checkNeighbors(index):
     OG = globalMap.data
     row, col = oneDto2(index)
     
+    # predefine indicies of the four-connected cells
     north = twoDto1((row-1, col))
     east  = twoDto1((row, col+1))
     south = twoDto1((row+1, col))
     west  = twoDto1((row, col-1))
     
+    # contents of the cells at locations adjacent to current cell
     neighborIndicies = (north, east, south, west)
 
     occupancies = []
     for i in range(len(neighborIndicies)):
+
+        # out of bounds check; treat it like a wall
         if neighborIndicies[i] <= 0 or neighborIndicies[i] >= 3999*3999:
             occupancies.append( 100 )
         else:
@@ -169,6 +175,7 @@ def spiralSearch( (currR, currC), exitCase ):
         # end if
     # end while
 
+    # end case when spiral starts searching outside of the world
     print 'Spiral search failed. Trying random goal'
     return (random.randint(1400,2600), random.randint(1400,2600))
 
@@ -176,6 +183,7 @@ def spiralSearch( (currR, currC), exitCase ):
 
 
 
+# returns the locaiton of a frontier. If no frontier, returns (-1,-1)
 def findFrontier(currR, currC):
     global globalMap
     global thClr
@@ -200,6 +208,8 @@ def findFrontier(currR, currC):
     if foundFron:
         #print 'Found frontier at', currR, currC
         #return (currR, currC)
+
+        # Iterates through boundary of frontier and returns a center
         return calculateCentroid(currR, currC)
     else:
         return (-1, -1)
@@ -236,6 +246,9 @@ def calculateCentroid(row, col):
 
 
     #print 'RT protocol'
+
+    # Hugs wall in counte-clockwise direction to trace outline of frontier
+    # Returns when falls into a loop or hits a wall
     endLocation = turnRightUntilWall(currentLocation)
     
     if endLocation == (-1,-1):
@@ -249,22 +262,28 @@ def calculateCentroid(row, col):
     #else:
         # found bubble
     
-
-
-    if len(frontierVector) < 70:
+    # Only care about frontiers above a certain size
+    if len(frontierVector) < 25:
         return (-1, -1)
     else:
         #centroid = moveAwayFromWall(centroid)
+
+        # average the coordinates to calculate centroid
         centroid = averageValues(frontierVector)
         print 'Found frontier of length',len(frontierVector)
+
+        # Show the frontier in Rviz
         publishVector(frontierVector)
         return centroid
 # end calculateCentroid
 
 
 
+# Takes an array of coordinates and converts it to array of markers
+# Markers are printed to RViz with unique IDs. When ID is overridded by next frontier,
+# that marker disappears from RViz
 def publishVector(vector):
-    global ogRef
+    global ogRef 
     (row, col) = ogRef
     (currX, currY) = odomFromRC(row, col)
 
@@ -277,14 +296,20 @@ def publishVector(vector):
         marker.id = i
         marker.header.frame_id = "/map"
         #marker.header.frame_id = "/base_link"
-        marker.type = marker.POINTS
+        marker.type = marker.SPHERE
         marker.action = marker.ADD
         marker.scale.x = 0.25
         marker.scale.y = 0.25
         marker.scale.z = 0.25
+        
+        # slightly transparent
         marker.color.a = 0.75
+        
+        # purple
         marker.color.r = 0.75
         marker.color.b = 0.75
+        
+        # pose of marker
         marker.pose.orientation.w = 1.0
         marker.pose.position.x = locX #- currX
         marker.pose.position.y = locY #- currY
@@ -298,6 +323,8 @@ def publishVector(vector):
 # end publishVector
 
 
+
+# Returns an average location of coordinates
 def averageValues(vector):
     rowSum = 0
     colSum = 0
@@ -313,6 +340,7 @@ def averageValues(vector):
 
 
 
+# Hugs the wall to trace a frontier
 def turnRightUntilWall(currentLocation):
     global frontierVector
     start = currentLocation
@@ -374,6 +402,7 @@ def turnRightUntilWall(currentLocation):
 
 
 
+# hugs the wall to trace a frontier
 def turnLeftUntilWall(currentLocation):
     global frontierVector
     start = currentLocation
@@ -427,6 +456,7 @@ def turnLeftUntilWall(currentLocation):
 
 
 
+# Converts magnetic direction to array index
 def charToIndex(char):
     if char == 'N':
         return 0
@@ -441,13 +471,15 @@ def charToIndex(char):
     
 
 
+# converts array index to magnetic direction
 def indexToChar(index):
     chars = ['N', 'E', 'S', 'W']
     return chars[index]
 # end indexToChar
 
 
-    
+
+# Returns the proper direction with given turn
 def turnCW(direction):
     if direction == 'N':
         direction = 'E'
@@ -463,6 +495,7 @@ def turnCW(direction):
 
 
 
+# Returns the proper direction with given turn
 def turnCCW(direction):
     if direction == 'N':
         direction = 'W'
@@ -478,6 +511,7 @@ def turnCCW(direction):
 
 
 
+# moves a 2D coordinate in a mangetic direction
 def moveInDirection((row, col), direction):
     if direction == 'N':
         row += 1
@@ -511,6 +545,7 @@ def putWallAtWithProb(mapCopy, index, probability):
 
 
 
+# Prints a buffer around the walls so that waypoints are not set too close to wall
 def widenWallsOfMap():
     global globalMap
     global thBlk
@@ -551,6 +586,7 @@ def clearLocals():
 
 
 
+# Prints a snapshot of the local occupancy grid
 def printLocalMap():
     localCells = localMatrix()
     for r in reversed(localCells):
@@ -560,12 +596,14 @@ def printLocalMap():
 
 
 
+# Converts matrix indicies to coordinate
 def odomFromRC(row, col):
     locX = (float(col-2000))*0.05
     locY = (float(row-2000))*0.05
     return (locX, locY)
 # end odomFromRC
 
+# converts coordinate to matrix indicies
 def rcFromOdom(locX, locY):
     row = int(locY/0.05)+2000
     col = int(locX/0.05)+2000
@@ -581,6 +619,8 @@ def clearGoals():
 
 
 
+# Creates a bnew goal close to the currect location to attempt
+# to get away from a wall
 def newRandomGoal():
     newGoal = Twist()
     global globalOdom
@@ -668,8 +708,8 @@ def og_callback(oGrid):
     (newGoalX, newGoalY) = odomFromRC(newGoalR, newGoalC)
 
     # Calculate displacement to goal
-    destX = newGoalX #+ random.uniform(-1,1)
-    destY = newGoalY #+ random.uniform(-1,1)
+    destX = newGoalX + random.uniform(-1,1)
+    destY = newGoalY + random.uniform(-1,1)
     dispX = destX #- currX
     dispY = destY #- currY
     print 'At x',currX,', y',currY
@@ -713,9 +753,10 @@ def odom_callback(odom):
                 stuckTime = now
                 global globalMap
                 global mBaseRecod
-                og_mb_callback(mBaseRecord,globalMap)
-                #clearGoals()
-                #newRandomGoal()
+                #og_callback(globalMap)
+                #og_mb_callback(mBaseRecord,globalMap)
+                clearGoals()
+                newRandomGoal()
                 reallyStuck = True
                 reallyStuckTime = now
             # end if
@@ -736,7 +777,7 @@ if __name__ == "__main__":
     
     #       -- Publishers --
     # Publish waypoint data to robot
-    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=2, latch=True)
+    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=1, latch=True)
 
     pubClr = rospy.Publisher('/move_base/cancel', GoalID, queue_size=1)
 
