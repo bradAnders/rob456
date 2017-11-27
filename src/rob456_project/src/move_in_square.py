@@ -10,7 +10,7 @@ import random
 import numpy as np
 pi = math.pi
 
-# The geometry_msgs Twist message
+# The geometry_msgs Twist messvage
 from geometry_msgs.msg import Twist
 
 from geometry_msgs.msg import PoseStamped
@@ -97,7 +97,10 @@ def checkNeighbors(index):
 
     occupancies = []
     for i in range(len(neighborIndicies)):
-        occupancies.append( OG[ neighborIndicies[i] ] )
+        if neighborIndicies[i] <= 0 or neighborIndicies[i] >= 3999*3999:
+            occupancies.append( 100 )
+        else:
+            occupancies.append( OG[ neighborIndicies[i] ] )
     # end for
 
     return occupancies
@@ -121,11 +124,16 @@ def mapOdomToOG():
 def spiralSearch( (currR, currC), exitCase ):
     
     global globalMap
+    global wallWidth
     currLen = 1
+    #currLen = wallWidth-1
     currDisp = 0
     onFirstEdge = True
     direction = 'N'
     count = 0
+
+    #currR -= wallWidth/2
+    #currC -= wallWidth/2
 
     while( count < 1200*1200 ):
         count += 1
@@ -133,7 +141,7 @@ def spiralSearch( (currR, currC), exitCase ):
         
         if currR < 0 or currC < 0 or currR >= 4000 or currC >= 4000:
             break
-        globalMap.data[twoDto1((currR, currC))] = 5
+        #globalMap.data[twoDto1((currR, currC))] = 5
 
         #if count % 10 == 0:
             #printLocalMap()
@@ -204,8 +212,28 @@ frontierVector = []
 def calculateCentroid(row, col):
 
     global frontierVector
+    global globalMap
+    OG = globalMap.data
     frontierVector = []
     currentLocation = (row, col)
+    
+    #print OG[twoDto1(currentLocation)], thClr
+    #printLocalMap()
+    #if OG[twoDto1(currentLocation)] > thClr:
+    #    return (-1, -1)
+    #reachable = False
+    #neighbors = checkNeighbors(twoDto1(currentLocation))
+    #for i in range(len(neighbors)):
+    #    #print neighbors[i],thClr
+    #    if neighbors[i] < thClr:
+    #        reachable = True
+        # end if
+    # end for
+
+    #if not reachable:
+    #    return (-1, -1)
+    #print 'Reachable'
+
 
     #print 'RT protocol'
     endLocation = turnRightUntilWall(currentLocation)
@@ -214,23 +242,20 @@ def calculateCentroid(row, col):
         return endLocation
     # end if
 
-    if endLocation != currentLocation:
+    #if endLocation != currentLocation:
         #currentLocation = endLocation
         #print 'LT protocol'
-        endLocation = turnLeftUntilWall(currentLocation)
+    #    endLocation = turnLeftUntilWall(currentLocation)
     #else:
         # found bubble
     
-    if len(frontierVector) == 0:
-        return (-1, -1)
-    #print 'Calculate centroid'
-    centroid = averageValues(frontierVector)
 
-    #centroid = moveAwayFromWall(centroid)
 
-    if len(frontierVector) < 100:
+    if len(frontierVector) < 70:
         return (-1, -1)
     else:
+        #centroid = moveAwayFromWall(centroid)
+        centroid = averageValues(frontierVector)
         print 'Found frontier of length',len(frontierVector)
         publishVector(frontierVector)
         return centroid
@@ -252,7 +277,7 @@ def publishVector(vector):
         marker.id = i
         marker.header.frame_id = "/map"
         #marker.header.frame_id = "/base_link"
-        marker.type = marker.SPHERE
+        marker.type = marker.POINTS
         marker.action = marker.ADD
         marker.scale.x = 0.25
         marker.scale.y = 0.25
@@ -321,7 +346,7 @@ def turnRightUntilWall(currentLocation):
         # Turn until not facing a wall
         while neighbors[direction] == -1:
             wallCount += 1
-            if wallCount > 3:
+            if wallCount > 4:
                 #print 'Turned in circle'
                 #print neighbors
                 return (-1,-1)
@@ -339,6 +364,7 @@ def turnRightUntilWall(currentLocation):
         for cell in frontierVector:
             if cell == currentLocation:
                 #print 'Went in loop'
+                #print 'Found loop going right'
                 return start
         frontierVector.append(currentLocation)
         #print 'Count', whileCount, 'at',currentLocation, 'start',start
@@ -354,7 +380,7 @@ def turnLeftUntilWall(currentLocation):
     neighbors = checkNeighbors(twoDto1(currentLocation))
     direction = -1
     foundWallOrReturned = False
-    
+    #print 'Turning Left' 
     # Point towards a wall
     for i in range(len(neighbors)):
         if neighbors[i] == -1:
@@ -378,7 +404,7 @@ def turnLeftUntilWall(currentLocation):
         # Turn until not facing a wall
         while neighbors[direction] == -1:
             wallCount += 1
-            if wallCount > 3:
+            if wallCount > 4:
                 return (-1,-1)
             # end if
             direction = charToIndex(turnCW(indexToChar(direction)))
@@ -392,9 +418,10 @@ def turnLeftUntilWall(currentLocation):
         direction = charToIndex(turnCCW(indexToChar(direction)))
         for cell in frontierVector:
             if cell == currentLocation:
-                #print 'Went in loop'
+                #print 'Found loop going left'
                 return start
         frontierVector.append(currentLocation)
+        #print 'Added left element'
     # end while
 # end turnRightUntilWall
 
@@ -558,10 +585,13 @@ def newRandomGoal():
     newGoal = Twist()
     global globalOdom
     position = globalOdom.pose.pose.position
-    newGoal.linear.x = position.x + random.uniform(-1,1)
-    newGoal.linear.y = position.y + random.uniform(-1,1)
+    dispX = random.uniform(-2,2)
+    dispY = random.uniform(-2,2)
+    newGoal.linear.x = position.x + dispX
+    newGoal.linear.y = position.y + dispY
+    command.angular.z = math.degrees(math.atan2(dispY,dispX))
     pubGoal.publish(newGoal)
-    print 'New Pseudo-Random Goal:',newGoal
+    print 'New Pseudo-Random Goal:',newGoal.linear.x,newGoal.linear.y
 # end newRandomGoal
 
 
@@ -600,15 +630,18 @@ def mb_callback(msg):
 
 
 # Occupancy grid update callback
-def og_mb_callback(mBase,oGrid):
-
+#def og_mb_callback(mBase,oGrid):
+def og_callback(oGrid):
+    #global mBaseRecord
+    #mBaseRecord = mBase
     
     # Check if robot has reached its goal
-    st = mBase.status.status
-    if not st == 3:
-        print 'Robot has failed to reach the goal!'
-    else:
-        print 'Robot has reached the goal!'
+    #st = mBase.status.status
+    #if not st == 3:
+    #    print 'Robot has failed to reach the goal!'
+    #else:
+    #    print 'Robot has reached the goal!'
+    #    clearGoals()
 
 
     global globalOdom
@@ -637,8 +670,8 @@ def og_mb_callback(mBase,oGrid):
     # Calculate displacement to goal
     destX = newGoalX #+ random.uniform(-1,1)
     destY = newGoalY #+ random.uniform(-1,1)
-    dispX = destX - currX
-    dispY = destY - currY
+    dispX = destX #- currX
+    dispY = destY #- currY
     print 'At x',currX,', y',currY
     print 'Going to x', dispX,', y', dispY
     
@@ -646,32 +679,51 @@ def og_mb_callback(mBase,oGrid):
     command = Twist()
     command.linear.x = dispX #+ random.uniform(-2, 2)
     command.linear.y = dispY #+ random.uniform(-2, 2)
-    command.angular.z = mathkdegrees(math.atan2(dispY,dispX))
+    command.angular.z = math.degrees(math.atan2(dispY,dispX))
     pubGoal.publish(command)
 
 # end og_callback
 
 
-thTime = 20
+thTime = 30
 stuck = False
+reallyStuck = False
 # Odometry update callback
 def odom_callback(odom):
     global globalOdom
     global thTime
     global stuckTime
+    global reallyStuckTime
     global stuck
+    global reallyStuck
     now = time.clock()
-    if globalOdom.pose.pose.position == odom.pose.pose.position:
-        if not stuck:
-            stuck = True
-            stuckTime = now
-        elif now-stuckTime > thTime:
-            print 'Stuck for',thTime,'s'
+    if globalOdom.pose.pose == odom.pose.pose:
+        if reallyStuck and now - reallyStuckTime > 2:
+            print 'Trying harder to unstick'
+            reallyStuckTime = now
+            clearGoals()
             newRandomGoal()
-            stuck = False
+        else:
+        
+            if not stuck:
+                stuck = True
+                stuckTime = now
+            elif now-stuckTime > thTime and stuck:
+                print 'Stuck for',thTime,'s'
+                stuckTime = now
+                global globalMap
+                global mBaseRecod
+                og_mb_callback(mBaseRecord,globalMap)
+                #clearGoals()
+                #newRandomGoal()
+                reallyStuck = True
+                reallyStuckTime = now
+            # end if
     else:
         stuckTime = now
+        reallyStuckTime = now
         stuck = False
+        reallyStuck = False
     globalOdom = odom
 # end dm_callback
 
@@ -684,7 +736,9 @@ if __name__ == "__main__":
     
     #       -- Publishers --
     # Publish waypoint data to robot
-    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=2)
+    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=2, latch=True)
+
+    pubClr = rospy.Publisher('/move_base/cancel', GoalID, queue_size=1)
 
     pubVel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
@@ -692,19 +746,18 @@ if __name__ == "__main__":
 
     #       -- Subscribers --
     # Subscribe to move_base result
-    subMb = message_filters.Subscriber('/move_base/result', MoveBaseActionResult)
-    #subMb = rospy.Subscriber('/move_base/result', MoveBaseActionResult, mb_callback)
+    #subMb = message_filters.Subscriber('/move_base/result', MoveBaseActionResult)
+    subMb = rospy.Subscriber('/move_base/result', MoveBaseActionResult, mb_callback)
 
     # subscribe to laser scan message
-    subOG = message_filters.Subscriber('map', OccupancyGrid)
-    #subOG = rospy.Subscriber('map', OccupancyGrid, og_callback)
+    #subOG = message_filters.Subscriber('map', OccupancyGrid)
+    subOG = rospy.Subscriber('map', OccupancyGrid, og_callback)
 
     # get latest estimate of current location
     subOdom = rospy.Subscriber('odom', Odometry, odom_callback)
 
-    
-    ts = message_filters.TimeSynchronizer([subMb, subOG], 10)
-    ts.registerCallback(og_mb_callback)
+    #ts = message_filters.ApproximateTimeSynchronizer([subMb, subOG], queue_size=10, slop=10)
+    #ts.registerCallback(og_mb_callback)
 
     # Publish initial zero velocity to init
     command = Twist()
@@ -715,6 +768,9 @@ if __name__ == "__main__":
     command.angular.y = 0.0
     command.angular.z = 0.0
     pubVel.publish(command)
+    rospy.sleep(2)
+
+    newRandomGoal()
 
     # Turn control back to ROS
     rospy.spin()

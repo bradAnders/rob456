@@ -57,7 +57,7 @@ window
   size [ 745 448 ] 
 
   rotate [ 1.000 0.500 ]
-  scale 25.272
+  scale 12.969
 )
 
 # load an environment bitmap
@@ -70,4 +70,4 @@ floorplan
 )
 
 # throw in a robot
-erratic( pose [ -7.551 10.038 0.000 92.534 ] name "era" color "blue" localizaion "gps" localization_origin [0 0 0 0])
+erratic( pose [ 0.552 0.545 0.000 -50.464 ] name "era" color "blue" localizaion "gps" localization_origin [0 0 0 0])
