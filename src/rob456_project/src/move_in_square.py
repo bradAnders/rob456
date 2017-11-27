@@ -129,7 +129,7 @@ def spiralSearch( (currR, currC), exitCase ):
 
     while( count < 1200*1200 ):
         count += 1
-        (currR, currC) = moveInDirection(currR, currC, direction)
+        (currR, currC) = moveInDirection((currR, currC), direction)
         
         if currR < 0 or currC < 0 or currR >= 4000 or currC >= 4000:
             break
@@ -190,9 +190,9 @@ def findFrontier(currR, currC):
     # end for
 
     if foundFron:
-        print 'Found frontier at', currR, currC
-        return (currR, currC)
-        #return calculateCentroid(currR, currC)
+        #print 'Found frontier at', currR, currC
+        #return (currR, currC)
+        return calculateCentroid(currR, currC)
     else:
         return (-1, -1)
     # end if
@@ -200,20 +200,218 @@ def findFrontier(currR, currC):
 # end findFrontier
 
 
-
+frontierVector = []
 def calculateCentroid(row, col):
 
-    # for now, don't caluclate anything
-    #(cenR, cenC) = spiralSearch( (row, col), isWall):
+    global frontierVector
+    frontierVector = []
+    currentLocation = (row, col)
 
-    return (row, col)
+    #print 'RT protocol'
+    endLocation = turnRightUntilWall(currentLocation)
+    
+    if endLocation == (-1,-1):
+        return endLocation
+    # end if
+
+    if endLocation != currentLocation:
+        #currentLocation = endLocation
+        #print 'LT protocol'
+        endLocation = turnLeftUntilWall(currentLocation)
+    #else:
+        # found bubble
+    
+    if len(frontierVector) == 0:
+        return (-1, -1)
+    #print 'Calculate centroid'
+    centroid = averageValues(frontierVector)
+
+    #centroid = moveAwayFromWall(centroid)
+
+    if len(frontierVector) < 100:
+        return (-1, -1)
+    else:
+        print 'Found frontier of length',len(frontierVector)
+        publishVector(frontierVector)
+        return centroid
 # end calculateCentroid
 
 
 
-def turnCW(direction):
+def publishVector(vector):
+    markerArray = MarkerArray()
+    for cell in vector:
+        (row,col) = cell
+        (locX, locY) = odomFromRC(row,col)
+        marker = Marker()
+        marker.header.frame_id = "/map"
+        marker.type = marker.SPHERE
+        marker.action = marker.ADD
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.scale.z = 0.1
+        marker.color.a = 1.0
+        marker.color.r = 1.0
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.x = locX
+        marker.pose.position.y = locY
+        marker.pose.position.z = 0
+        markerArray.markers.append(marker)
+    # end for
+    pubMrk.publish(markerArray)
+
+# end publishVector
+
+
+def averageValues(vector):
+    rowSum = 0
+    colSum = 0
+    
+    for i in range(len(vector)):
+        (row, col) = vector[i]
+        rowSum += row
+        colSum += col
+    # end if
+
+    return (rowSum/len(vector), colSum/len(vector))
+# end averageValues
+
+
+
+def turnRightUntilWall(currentLocation):
+    global frontierVector
+    start = currentLocation
+    neighbors = checkNeighbors(twoDto1(currentLocation))
+    direction = -1
+    foundWallOrReturned = False
+    
+    # Point towards a wall
+    for i in range(len(neighbors)):
+        if neighbors[i] == -1:
+            direction = i
+            break
+        elif neighbors[i] > thBlk:
+            # found wall
+            currentLocation = moveInDirection(currentLocation,i)
+            #print 'Found wall'
+            return currentLocation
+        # end if
+    # end for
+    
+    # if no walls, error; return exit case
+    if direction == -1:
+        return (-1, -1)
+    # end if
+    
+    #print 'Searching along wall...'
+    # Find a wall or loop
+    whileCount = 0
+    while not foundWallOrReturned:
+        wallCount = 0
+        # Turn until not facing a wall
+        while neighbors[direction] == -1:
+            wallCount += 1
+            if wallCount > 3:
+                #print 'Turned in circle'
+                #print neighbors
+                return (-1,-1)
+            # end if
+            direction = charToIndex(turnCCW(indexToChar(direction)))
+        # end while
+        if neighbors[direction] > thBlk:
+            currentLocation = moveInDirection(currentLocation,i)
+            #print 'Found wall'
+            return currentLocation
+        # end if
+        currentLocation = moveInDirection(currentLocation, indexToChar(direction))
+        neighbors = checkNeighbors(twoDto1(currentLocation))
+        direction = charToIndex(turnCW(indexToChar(direction)))
+        for cell in frontierVector:
+            if cell == currentLocation:
+                #print 'Went in loop'
+                return start
+        frontierVector.append(currentLocation)
+        #print 'Count', whileCount, 'at',currentLocation, 'start',start
+        whileCount += 1
+    # end while
+# end turnRightUntilWall
+
+
+
+def turnLeftUntilWall(currentLocation):
+    global frontierVector
+    start = currentLocation
+    neighbors = checkNeighbors(twoDto1(currentLocation))
+    direction = -1
+    foundWallOrReturned = False
+    
+    # Point towards a wall
+    for i in range(len(neighbors)):
+        if neighbors[i] == -1:
+            direction = i
+            break
+        elif neighbors[i] > thBlk:
+            # found wall
+            currentLocation = moveInDirection(currentLocation,i)
+            return currentLocation
+        # end if
+    # end for
+    
+    # if no walls, error; return exit case
+    if direction == -1:
+        return (-1, -1)
+    # end if
+
+    # Find a wall or loop
+    while not foundWallOrReturned:
+        wallCount = 0
+        # Turn until not facing a wall
+        while neighbors[direction] == -1:
+            wallCount += 1
+            if wallCount > 3:
+                return (-1,-1)
+            # end if
+            direction = charToIndex(turnCW(indexToChar(direction)))
+        # end while
+        if neighbors[direction] > thBlk:
+            currentLocation = moveInDirection(currentLocation,indexToChar(direction))
+            return currentLocation
+        # end if
+        currentLocation = moveInDirection(currentLocation, indexToChar(direction))
+        neighbors = checkNeighbors(twoDto1(currentLocation))
+        direction = charToIndex(turnCCW(indexToChar(direction)))
+        for cell in frontierVector:
+            if cell == currentLocation:
+                #print 'Went in loop'
+                return start
+        frontierVector.append(currentLocation)
+    # end while
+# end turnRightUntilWall
+
+
+
+def charToIndex(char):
+    if char == 'N':
+        return 0
+    elif char == 'E':
+        return 1
+    elif char == 'S':
+        return 2
+    elif char == 'W':
+        return 3
+    # end if
+# end charToIndex
+    
+
+
+def indexToChar(index):
+    chars = ['N', 'E', 'S', 'W']
+    return chars[index]
+# end indexToChar
+
 
     
+def turnCW(direction):
     if direction == 'N':
         direction = 'E'
     elif direction == 'E':
@@ -223,14 +421,27 @@ def turnCW(direction):
     elif direction == 'W':
         direction = 'N'
     # end if
-
     return direction
 # end turnCW
 
 
 
-def moveInDirection(row, col, direction):
-    
+def turnCCW(direction):
+    if direction == 'N':
+        direction = 'W'
+    elif direction == 'E':
+        direction = 'N'
+    elif direction == 'S':
+        direction = 'E'
+    elif direction == 'W':
+        direction = 'S'
+    # end if
+    return direction
+# end turnCW
+
+
+
+def moveInDirection((row, col), direction):
     if direction == 'N':
         row += 1
     elif direction == 'E':
@@ -240,7 +451,6 @@ def moveInDirection(row, col, direction):
     elif direction == 'W':
         col -= 1
     # end if
-
     return (row, col)
 # end moveInDirection
 
@@ -290,7 +500,8 @@ def clearLocals():
     global wallWidth
     width = wallWidth - 2
     if width <= 0:
-        width = 1;
+        width = 1
+    # end if
     for r in range(currR-width, currR+width):
         for c in range(currC-width, currC+width):
             if globalMap.data[twoDto1((r,c))] == -1:
@@ -307,25 +518,20 @@ def printLocalMap():
     localCells = localMatrix()
     for r in reversed(localCells):
         print ' '.join('%03s' % i for i in r)
+    # end for
 # end printLocalMap
 
 
 
 def odomFromRC(row, col):
-
     locX = (float(col-2000))*0.05
     locY = (float(row-2000))*0.05
-    #print 'Converting',row,col,'to',locX,locY
-    
     return (locX, locY)
 # end odomFromRC
 
 def rcFromOdom(locX, locY):
-    
     row = int(locY/0.05)+2000
     col = int(locX/0.05)+2000
-    #print 'Converting',locX,locY,'to',row,col
-
     return (row, col)
 # end rcFromOdom
 
@@ -355,7 +561,6 @@ def goal_callback(msg):
     print ''
     print 'Recieved new goal'
     print msg
-
 # end goal_callback
 
 
@@ -381,32 +586,24 @@ def mb_callback(msg):
     # if st==1 -> Robot on way to goal
     # end if
 
-
 # end mb_callback
 
 
-markerArray = MarkerArray()
 # Occupancy grid update callback
 def og_callback(msg):
     global globalOdom
     currX = globalOdom.pose.pose.position.x
     currY = globalOdom.pose.pose.position.y
     
-    global ogRef
-    ogRef = rcFromOdom(currX, currY)
-
     global globalMap
     globalMap = msg
     widenWallsOfMap()
     clearLocals()
     print ''
     print 'Occupancy Grid Updated'
-    #print 'Index of current location: ', mapOdomToOG()
-    #printLocalMap()
 
     # Current location from odom to OG
     (currR, currC) = rcFromOdom(currX, currY)
-
 
     # Where to go in occupancy grid reference point
     (newGoalR, newGoalC) = spiralSearch( (currR, currC), findFrontier )
@@ -415,90 +612,82 @@ def og_callback(msg):
     (newGoalX, newGoalY) = odomFromRC(newGoalR, newGoalC)
 
     # Calculate displacement to goal
-    destX = newGoalX + random.uniform(-1,1) #- currX
-    destY = newGoalY + random.uniform(-1,1) #- currY
-    print 'At x',currX,', y',currY
-    print 'Going to x', destX,' ,y', destY
-    
+    destX = newGoalX #+ random.uniform(-1,1)
+    destY = newGoalY #+ random.uniform(-1,1)
     dispX = destX - currX
     dispY = destY - currY
+    print 'At x',currX,', y',currY
+    print 'Going to x', destX,', y', destY
+    
     # Publish the goal
     command = Twist()
-    #command.linear.x = destY #+ random.uniform(-2, 2)
-    #command.linear.y = -destX #+ random.uniform(-2, 2)
     command.linear.x = destX #+ random.uniform(-2, 2)
     command.linear.y = destY #+ random.uniform(-2, 2)
-    #command.angular.x = math.degrees((math.atan2(dispY,dispX)+(2*pi)) % (2*pi))
     command.angular.z = math.degrees(math.atan2(dispY,dispX))
-    #command.target_pose.pose.position.x = destX
-    #command.target_pose.pose.position.y = destY
-    #command.target_pose.header.stamp = rospy.Time.now()
-    #clearGoals()
     pubGoal.publish(command)
 
-    global markerArray
-    markerArray = []
-    marker = Marker()
-    marker.header.frame_id = "/neck"
-    marker.type = marker.SPHERE
-    marker.action = marker.ADD
-    marker.scale.x = 0.2
-    marker.scale.y = 0.2
-    marker.scale.z = 0.2
-    marker.color.a = 1.0
-    marker.pose.orientation.w = 1.0
-    marker.pose.position.x = destX
-    marker.pose.position.y = destY
-    markerArray.append(marker)
-    pubMkr.publish(markerArray)
 # end og_callback
 
 
-
+thTime = 20
+stuck = False
 # Odometry update callback
 def odom_callback(odom):
     global globalOdom
+    global thTime
+    global stuckTime
+    global stuck
+    now = time.clock()
+    if globalOdom.pose.pose.position == odom.pose.pose.position:
+        if not stuck:
+            stuck = True
+            stuckTime = now
+        elif now-stuckTime > thTime:
+            print 'Stuck for',thTime,'s'
+            newRandomGoal()
+            stuck = False
+    else:
+        stuckTime = now
+        stuck = False
     globalOdom = odom
 # end dm_callback
 
 
 
 if __name__ == "__main__":
+    
     # Initialize the node
     rospy.init_node('move_in_square', log_level=rospy.DEBUG)
-
+    
+    #       -- Publishers --
     # Publish waypoint data to robot
-    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=10)
+    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=2)
 
     pubVel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
-    pubClr = rospy.Publisher('/cancel', GoalID, queue_size=1)
+    pubMrk = rospy.Publisher('/visualization_marker', MarkerArray, queue_size=1000)
 
-    pubMkr = rospy.Publisher('visualization_marker_array', MarkerArray, queue_size=1)
-
-    #pub4 = rospy.Publisher('/goal', PoseStamped)
-
+    #       -- Subscribers --
     # Subscribe to move_base result
     subMbRes = rospy.Subscriber('/move_base/result', MoveBaseActionResult, mb_callback)
 
     # subscribe to laser scan message
     subOG = rospy.Subscriber('map', OccupancyGrid, og_callback)
 
-
+    # get latest estimate of current location
     subOdom = rospy.Subscriber('odom', Odometry, odom_callback)
 
-    subGoal = rospy.Subscriber('/move_base_simple/goal', PoseStamped, goal_callback)
-    
-    command = Twist()
    
+    # Publish initial zero velocity to init
+    command = Twist()
     command.linear.x = 0.0
     command.linear.y = 0.0
     command.linear.z = 0.0
     command.angular.x = 0.0
     command.angular.y = 0.0
     command.angular.z = 0.0
-
     pubVel.publish(command)
+
     # Turn control back to ROS
     rospy.spin()
 # end main

@@ -1,7 +1,8 @@
 <launch>
   <!-- Launch world -->
-  <node pkg="stage_ros" type="stageros" name="simulator" args="$(find rob456_project)/worlds/mazeWorld.world"/>
-  <!--node pkg="stage_ros" type="stageros" name="simulator" args="$(find rob456_project)/worlds/officeWorld.world"/-->
+  <!--node pkg="stage_ros" type="stageros" name="simulator" args="$(find rob456_project)/worlds/mazeWorld.world"/-->
+  <node pkg="stage_ros" type="stageros" name="simulator" args="$(find rob456_project)/worlds/officeWorld.world"/>
+  <!--node pkg="stage_ros" type="stageros" name="simulator" args="$(find rob456_project)/worlds/manyDots.world"/-->
 
   <!-- Launch move_in_square.py -->
   <node pkg="rob456_project" type="move_in_square.py" name="move_in_square" output="screen"/>
