@@ -56,18 +56,18 @@ window
 ( 
   size [ 745 448 ] 
 
-  rotate [ 1.000 0.500 ]
-  scale 25.272
+  rotate [ 0.000 0.000 ]
+  scale 10.719
 )
 
 # load an environment bitmap
 floorplan
 ( 
-  name "officeWorld"
-  bitmap "officeWorld.pgm"
-  size [50.000 50.000 0.500]
-  pose [ 0.000 0.000 0.000 0.000 ]
+  name "manyDots"
+  bitmap "manyDots.pgm"
+  size [54.000 58.700 0.500]
+  pose [ 0.000 0.000 0.000 90.000 ]
 )
 
 # throw in a robot
-erratic( pose [ -7.551 10.038 0.000 92.534 ] name "era" color "blue" localizaion "gps" localization_origin [0 0 0 0])
+erratic( pose [ 20.015 10.590 0.000 -171.495 ] name "era" color "blue" localizaion "gps" localization_origin [0 0 0 0])
