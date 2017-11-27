@@ -239,25 +239,34 @@ def calculateCentroid(row, col):
 
 
 def publishVector(vector):
+    global globalOdom
+    currX = globalOdom.pose.pose.position.x
+    currY = globalOdom.pose.pose.position.y
     markerArray = MarkerArray()
-    for cell in vector:
+    for i in range(len(vector)):
+        cell = vector[i]
         (row,col) = cell
         (locX, locY) = odomFromRC(row,col)
         marker = Marker()
+        marker.id = i
         marker.header.frame_id = "/map"
+        #marker.header.frame_id = "/base_link"
         marker.type = marker.SPHERE
         marker.action = marker.ADD
-        marker.scale.x = 0.1
-        marker.scale.y = 0.1
-        marker.scale.z = 0.1
-        marker.color.a = 1.0
-        marker.color.r = 1.0
+        marker.scale.x = 0.25
+        marker.scale.y = 0.25
+        marker.scale.z = 0.25
+        marker.color.a = 0.75
+        marker.color.r = 0.75
+        marker.color.b = 0.75
         marker.pose.orientation.w = 1.0
-        marker.pose.position.x = locX
-        marker.pose.position.y = locY
+        marker.pose.position.x = locX - currX
+        marker.pose.position.y = locY - currY
         marker.pose.position.z = 0
         markerArray.markers.append(marker)
+        #print 'Added marker',locX,locY
     # end for
+    #print markerArray
     pubMrk.publish(markerArray)
 
 # end publishVector
@@ -617,12 +626,12 @@ def og_callback(msg):
     dispX = destX - currX
     dispY = destY - currY
     print 'At x',currX,', y',currY
-    print 'Going to x', destX,', y', destY
+    print 'Going to x', dispX,', y', dispY
     
     # Publish the goal
     command = Twist()
-    command.linear.x = destX #+ random.uniform(-2, 2)
-    command.linear.y = destY #+ random.uniform(-2, 2)
+    command.linear.x = dispX #+ random.uniform(-2, 2)
+    command.linear.y = dispY #+ random.uniform(-2, 2)
     command.angular.z = math.degrees(math.atan2(dispY,dispX))
     pubGoal.publish(command)
 
@@ -665,7 +674,7 @@ if __name__ == "__main__":
 
     pubVel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
-    pubMrk = rospy.Publisher('/visualization_marker', MarkerArray, queue_size=1000)
+    pubMrk = rospy.Publisher('/visualization_marker', MarkerArray, queue_size=10000)
 
     #       -- Subscribers --
     # Subscribe to move_base result
@@ -677,7 +686,7 @@ if __name__ == "__main__":
     # get latest estimate of current location
     subOdom = rospy.Subscriber('odom', Odometry, odom_callback)
 
-   
+
     # Publish initial zero velocity to init
     command = Twist()
     command.linear.x = 0.0
