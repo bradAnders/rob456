@@ -7,10 +7,13 @@ import math
 import message_filters
 import time
 import random
+import numpy as np
 pi = math.pi
 
 # The geometry_msgs Twist message
 from geometry_msgs.msg import Twist
+
+from geometry_msgs.msg import PoseStamped
 
 from actionlib_msgs.msg import GoalID
 
@@ -27,13 +30,16 @@ from nav_msgs.msg import OccupancyGrid
 # Estimated odometry from SLAM
 from nav_msgs.msg import Odometry
 
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
+
 globalOdom = Odometry()
 
 
 # Thresholds for clear and blocked grid cells
 thClr = 20
 thBlk = 80
-wallWidth = 15
+wallWidth = int(1.2/0.05)
 
 
 # Properties of generic occupancy grid
@@ -53,11 +59,13 @@ def oneDto2(index):
 # Returns a downsampled matrix snipped from the occupancy grid
 def localMatrix():
     global globalMap
+    global ogRef
     OG = globalMap.data
-    (row, col) = mapOdomToOG()
+    #(row, col) = mapOdomToOG()
+    (row, col) = ogRef
 
     size = 20       # Width to sample before downsampling
-    stepSize = 1    # Downsample resolution
+    stepSize = 4    # Downsample resolution
     height = size*stepSize
     localGrid = []
 
@@ -103,7 +111,7 @@ def mapOdomToOG():
     global globalOdom
     #colPix = int( globalOdom.pose.pose.position.x/0.05)+2000
     #rowPix = int( globalOdom.pose.pose.position.y/0.05)+2000
-    return rcFromOdom( globalOdom.pose.pose.position.y, globalOdom.pose.pose.position.x )
+    return rcFromOdom( globalOdom.pose.pose.position.x, globalOdom.pose.pose.position.y )
 # end mapOdomToOG
 
 
@@ -127,9 +135,10 @@ def spiralSearch( (currR, currC), exitCase ):
             break
         globalMap.data[twoDto1((currR, currC))] = 5
 
-        #printLocalMap()
-        #print 'Spiral at',currR,currC
-        #time.sleep(0.1)
+        #if count % 10 == 0:
+            #printLocalMap()
+            #print 'Spiral at',currR,currC
+            #time.sleep(0.15)
 
         currDisp += 1
 
@@ -152,7 +161,8 @@ def spiralSearch( (currR, currC), exitCase ):
         # end if
     # end while
 
-    return (random.randint(0,3999), random.randint(0,3999))
+    print 'Spiral search failed. Trying random goal'
+    return (random.randint(1400,2600), random.randint(1400,2600))
 
 # end spiralSearch
 
@@ -182,7 +192,7 @@ def findFrontier(currR, currC):
     if foundFron:
         print 'Found frontier at', currR, currC
         return (currR, currC)
-        return calculateCentroid(currR, currC)
+        #return calculateCentroid(currR, currC)
     else:
         return (-1, -1)
     # end if
@@ -284,7 +294,7 @@ def clearLocals():
     for r in range(currR-width, currR+width):
         for c in range(currC-width, currC+width):
             if globalMap.data[twoDto1((r,c))] == -1:
-                globalMap.data[twoDto1((r,c))] = thBlk-1
+                globalMap.data[twoDto1((r,c))] = 1
             # end if
         # end for
     # end for
@@ -301,10 +311,11 @@ def printLocalMap():
 
 
 
-def  odomFromRC(row, col):
+def odomFromRC(row, col):
 
     locX = (float(col-2000))*0.05
     locY = (float(row-2000))*0.05
+    #print 'Converting',row,col,'to',locX,locY
     
     return (locX, locY)
 # end odomFromRC
@@ -313,6 +324,7 @@ def rcFromOdom(locX, locY):
     
     row = int(locY/0.05)+2000
     col = int(locX/0.05)+2000
+    #print 'Converting',locX,locY,'to',row,col
 
     return (row, col)
 # end rcFromOdom
@@ -326,7 +338,29 @@ def clearGoals():
 
 
 
-# Calback to subscribe to move base
+def newRandomGoal():
+    newGoal = Twist()
+    global globalOdom
+    position = globalOdom.pose.pose.position
+    newGoal.linear.x = position.x + random.uniform(-1,1)
+    newGoal.linear.y = position.y + random.uniform(-1,1)
+    pubGoal.publish(newGoal)
+    print 'New Pseudo-Random Goal:',newGoal
+# end newRandomGoal
+
+
+
+# Callback to subscribe to current goal
+def goal_callback(msg):
+    print ''
+    print 'Recieved new goal'
+    print msg
+
+# end goal_callback
+
+
+
+# Callback to subscribe to move base
 def mb_callback(msg):
   
     print ''
@@ -336,26 +370,31 @@ def mb_callback(msg):
     st = msg.status.status
     if st==2 or st==4 or st==5 or st==6:
         print 'Robot has failed to reach the goal!'
-        clearGoals()
+        #clearGoals()
+        #newRandomGoal()
+        print msg
     elif st==3:
+        #newRandomGoal()
         print 'Robot has reached the goal!'
+    else:
+        print 'Other status message'
     # if st==1 -> Robot on way to goal
     # end if
 
-    newGoal = Twist()
-    newGoal.linear.x = random.uniform(-20,20)
-    newGoal.linear.y = random.uniform(-20,20)
-    pubGoal.publish(newGoal)
 
 # end mb_callback
 
 
-
+markerArray = MarkerArray()
 # Occupancy grid update callback
 def og_callback(msg):
     global globalOdom
     currX = globalOdom.pose.pose.position.x
     currY = globalOdom.pose.pose.position.y
+    
+    global ogRef
+    ogRef = rcFromOdom(currX, currY)
+
     global globalMap
     globalMap = msg
     widenWallsOfMap()
@@ -376,18 +415,42 @@ def og_callback(msg):
     (newGoalX, newGoalY) = odomFromRC(newGoalR, newGoalC)
 
     # Calculate displacement to goal
-    destX = newGoalX - currX
-    destY = newGoalY - currY
-    print 'Going to', destX, destY
+    destX = newGoalX + random.uniform(-1,1) #- currX
+    destY = newGoalY + random.uniform(-1,1) #- currY
+    print 'At x',currX,', y',currY
+    print 'Going to x', destX,' ,y', destY
+    
+    dispX = destX - currX
+    dispY = destY - currY
     # Publish the goal
     command = Twist()
-    command.linear.x = destX
-    command.linear.y = destY
+    #command.linear.x = destY #+ random.uniform(-2, 2)
+    #command.linear.y = -destX #+ random.uniform(-2, 2)
+    command.linear.x = destX #+ random.uniform(-2, 2)
+    command.linear.y = destY #+ random.uniform(-2, 2)
+    #command.angular.x = math.degrees((math.atan2(dispY,dispX)+(2*pi)) % (2*pi))
+    command.angular.z = math.degrees(math.atan2(dispY,dispX))
     #command.target_pose.pose.position.x = destX
     #command.target_pose.pose.position.y = destY
     #command.target_pose.header.stamp = rospy.Time.now()
-    clearGoals()
+    #clearGoals()
     pubGoal.publish(command)
+
+    global markerArray
+    markerArray = []
+    marker = Marker()
+    marker.header.frame_id = "/neck"
+    marker.type = marker.SPHERE
+    marker.action = marker.ADD
+    marker.scale.x = 0.2
+    marker.scale.y = 0.2
+    marker.scale.z = 0.2
+    marker.color.a = 1.0
+    marker.pose.orientation.w = 1.0
+    marker.pose.position.x = destX
+    marker.pose.position.y = destY
+    markerArray.append(marker)
+    pubMkr.publish(markerArray)
 # end og_callback
 
 
@@ -405,11 +468,13 @@ if __name__ == "__main__":
     rospy.init_node('move_in_square', log_level=rospy.DEBUG)
 
     # Publish waypoint data to robot
-    pubGoal = rospy.Publisher('/base_link_goal', Twist, queue_size=10)
+    pubGoal = rospy.Publisher('map_goal', Twist, queue_size=10)
 
-    pubVel = rospy.Publisher('/cmd_vel', Twist)
+    pubVel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
     pubClr = rospy.Publisher('/cancel', GoalID, queue_size=1)
+
+    pubMkr = rospy.Publisher('visualization_marker_array', MarkerArray, queue_size=1)
 
     #pub4 = rospy.Publisher('/goal', PoseStamped)
 
@@ -421,6 +486,8 @@ if __name__ == "__main__":
 
 
     subOdom = rospy.Subscriber('odom', Odometry, odom_callback)
+
+    subGoal = rospy.Subscriber('/move_base_simple/goal', PoseStamped, goal_callback)
     
     command = Twist()
    
